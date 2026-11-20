@@ -94,16 +94,77 @@ const reels = [
   { title: "Room to breathe in Jubilee Hills", views: "760 views", image: properties[3].images[0], property: properties[3] }
 ];
 
+const brokers = [
+  {
+    id: "ananya-rao", name: "Ananya Rao", city: "Bengaluru", tier: "Premium", fee: 85000,
+    experience: 9, rating: 4.9, reviews: 128,
+    markets: ["bengaluru", "indiranagar", "whitefield"],
+    services: ["Premium marketing", "Professional photography", "Legal support"],
+    image: "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=120&q=80"
+  },
+  {
+    id: "rhea-thomas", name: "Rhea Thomas", city: "Bengaluru", tier: "Local", fee: 32000,
+    experience: 5, rating: 4.8, reviews: 74,
+    markets: ["bengaluru", "indiranagar", "whitefield"],
+    services: ["Neighbourhood marketing", "Site visits", "Price guidance"],
+    image: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80"
+  },
+  {
+    id: "devika-nair", name: "Devika Nair", city: "Bengaluru", tier: "Local", fee: 45000,
+    experience: 7, rating: 4.9, reviews: 92,
+    markets: ["bengaluru", "indiranagar", "whitefield"],
+    services: ["Verified buyer network", "Negotiation", "Paperwork"],
+    image: "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=120&q=80"
+  },
+  {
+    id: "kabir-mehta", name: "Kabir Mehta", city: "Mumbai", tier: "Premium", fee: 95000,
+    experience: 11, rating: 4.9, reviews: 156,
+    markets: ["mumbai", "bandra", "andheri"],
+    services: ["Premium marketing", "Professional photography", "Legal support"],
+    image: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80"
+  },
+  {
+    id: "mira-kulkarni", name: "Mira Kulkarni", city: "Mumbai", tier: "Local", fee: 38000,
+    experience: 6, rating: 4.7, reviews: 81,
+    markets: ["mumbai", "bandra", "andheri"],
+    services: ["Neighbourhood marketing", "Site visits", "Paperwork"],
+    image: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=120&q=80"
+  },
+  {
+    id: "vikram-shah", name: "Vikram Shah", city: "Hyderabad", tier: "Premium", fee: 72000,
+    experience: 8, rating: 4.8, reviews: 103,
+    markets: ["hyderabad", "jubilee hills"],
+    services: ["Premium marketing", "Professional photography", "Negotiation"],
+    image: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=120&q=80"
+  },
+  {
+    id: "arjun-desai", name: "Arjun Desai", city: "Pune", tier: "Local", fee: 29000,
+    experience: 4, rating: 4.7, reviews: 58,
+    markets: ["pune", "koregaon park"],
+    services: ["Neighbourhood marketing", "Site visits", "Price guidance"],
+    image: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80"
+  }
+];
+
 const state = {
   page: "home",
   selectedProperty: properties[0],
   filter: "All homes",
-  mode: "Buy",
-  search: "",
+  mode: "All",
+  budget: "any",
+  location: "Mumbai",
+  radius: 25,
   user: JSON.parse(localStorage.getItem("haven-user") || "null"),
   saved: JSON.parse(localStorage.getItem("haven-saved") || "[]"),
   customListings: JSON.parse(localStorage.getItem("haven-listings") || "[]"),
   messages: JSON.parse(localStorage.getItem("haven-messages") || "[]"),
+  brokerConversations: JSON.parse(localStorage.getItem("haven-broker-conversations") || "{}"),
+  selectedBroker: null,
+  messageContact: null,
+  brokerTier: "All",
+  brokerBudget: "any",
+  brokerSort: "rating",
+  brokerService: "All services",
   selectedReel: 0,
   formData: null,
   photoProcessing: false
@@ -114,6 +175,13 @@ const modalBackdrop = document.querySelector("#modalBackdrop");
 const modal = document.querySelector("#modal");
 const toastElement = document.querySelector("#toast");
 const categories = ["All homes", "Apartment", "House", "Villa", "Townhouse", "Studio", "Land", "Commercial"];
+const locations = ["Mumbai", "Bengaluru", "Hyderabad", "Pune", "All cities"];
+const locationAreas = {
+  Mumbai: ["mumbai", "bandra", "andheri", "reclamation"],
+  Bengaluru: ["bengaluru", "indiranagar", "nandi hills", "whitefield"],
+  Hyderabad: ["hyderabad", "jubilee hills"],
+  Pune: ["pune", "koregaon park"]
+};
 const categoryTypes = {
   Apartment: ["Apartment", "Penthouse", "Duplex"],
   House: ["Independent house", "Row house", "Farmhouse"],
@@ -145,6 +213,45 @@ function allProperties() {
   return [...state.customListings, ...properties];
 }
 
+function distanceFromLocation(property, location) {
+  if (location === "All cities") return 0;
+  const knownDistances = {
+    "olive-villa": { Bengaluru: 60 },
+    "garden-row": { Bengaluru: 18 }
+  };
+  if (knownDistances[property.id]?.[location] !== undefined) return knownDistances[property.id][location];
+  if (String(property.location || "").toLowerCase().includes(location.toLowerCase())) return 0;
+  const areas = locationAreas[location] || [location.toLowerCase()];
+  if (!areas.some(area => String(property.location || "").toLowerCase().includes(area))) return Infinity;
+  if (property.id === "olive-villa") return 60;
+  if (property.id === "garden-row") return 18;
+  return 0;
+}
+
+function isWithinBudget(property) {
+  if (state.budget === "any") return true;
+  const amount = property.mode === "Rent" ? Number(property.price) / 1000 : Number(property.price) / 100000;
+  const ranges = {
+    "under-50": amount < 50,
+    "50-100": amount >= 50 && amount < 100,
+    "100-200": amount >= 100 && amount < 200,
+    "200-500": amount >= 200 && amount < 500,
+    "over-500": amount >= 500
+  };
+  const isMatch = ranges[state.budget];
+  return isMatch === undefined ? true : isMatch;
+}
+
+function budgetOptions() {
+  const labels = state.mode === "Rent"
+    ? ["Budget", "Under ₹50k/mo", "₹50k–₹1L/mo", "₹1L–₹2L/mo", "₹2L–₹5L/mo", "Above ₹5L/mo"]
+    : state.mode === "Buy"
+      ? ["Budget", "Under ₹50L", "₹50L–₹1Cr", "₹1Cr–₹2Cr", "₹2Cr–₹5Cr", "Above ₹5Cr"]
+      : ["Budget", "Under ₹50L / ₹25k monthly", "₹50L–₹1Cr / ₹25k–₹50k monthly", "₹1Cr–₹2Cr / ₹50k–₹1L monthly", "₹2Cr–₹5Cr / ₹1L–₹2L monthly", "Above ₹5Cr / ₹2L monthly"];
+  const values = ["any", "under-50", "50-100", "100-200", "200-500", "over-500"];
+  return values.map((value, index) => `<option value="${value}" ${state.budget === value ? "selected" : ""}>${labels[index]}</option>`).join("");
+}
+
 function propertyCard(property) {
   const saved = state.saved.includes(property.id);
   return `<article class="property-card" data-property="${property.id}" tabindex="0" role="button" aria-label="View ${escapeHtml(property.title)}">
@@ -160,32 +267,74 @@ function propertyCard(property) {
 }
 
 function renderHome() {
-  const matching = allProperties().filter(p => p.mode === state.mode)
+  const matching = allProperties().filter(p => state.mode === "All" || p.mode === state.mode)
     .filter(p => state.filter === "All homes" || p.category === state.filter || p.type === state.filter)
-    .filter(p => !state.search || `${p.title} ${p.location} ${p.type}`.toLowerCase().includes(state.search.toLowerCase()));
+    .filter(p => distanceFromLocation(p, state.location) <= state.radius)
+    .filter(isWithinBudget);
   main.innerHTML = `<div class="page-shell">
     <section class="hero"><div class="hero-content">
       <span class="eyebrow">A better way to find home</span>
-      <h1>Find a place<br>to call <em>yours.</em></h1>
-      <p>Thoughtful homes, good people, and a little less searching. Your next chapter starts here.</p>
+      <h1>Your next chapter<br>starts <em>here.</em></h1>
+      <p>Search verified listings by neighbourhood, budget and lifestyle.</p>
       <form class="search-box" id="searchForm">
-        <label class="search-field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg><input id="locationSearch" placeholder="City, neighbourhood, or postcode" value="${escapeHtml(state.search)}" aria-label="Search by location"></label>
-        <span class="search-divider"></span>
-        <select class="search-select" id="modeSelect" aria-label="Listing type"><option ${state.mode === "Buy" ? "selected" : ""}>Buy</option><option ${state.mode === "Rent" ? "selected" : ""}>Rent</option></select>
-        <button class="button" type="submit">Find a home &nbsp; →</button>
+        <button class="search-location" id="openLocationDialog" data-action="open-location" type="button" aria-label="Change location, currently ${escapeHtml(state.location)}" aria-haspopup="dialog">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg>
+          <span><small>Location</small><strong>${escapeHtml(state.location)}</strong></span><span class="location-chevron">⌄</span>
+        </button>
+        <label class="search-filter"><select id="modeSelect" aria-label="Buy or rent"><option value="All" ${state.mode === "All" ? "selected" : ""}>Buy or rent</option><option value="Buy" ${state.mode === "Buy" ? "selected" : ""}>Buy</option><option value="Rent" ${state.mode === "Rent" ? "selected" : ""}>Rent</option></select></label>
+        <label class="search-filter"><select id="budgetSelect" aria-label="Budget">${budgetOptions()}</select></label>
+        <label class="search-filter"><select id="propertyTypeSelect" aria-label="Property type">${categories.map(category => `<option value="${escapeHtml(category)}" ${state.filter === category ? "selected" : ""}>${category === "All homes" ? "Property type" : escapeHtml(category)}</option>`).join("")}</select></label>
+        <button class="button" type="submit">Search homes</button>
       </form>
       <div class="trust-row"><div class="trust-avatars"><span>A</span><span>K</span><span>R</span><span>M</span></div><span>Good homes. Better beginnings.</span></div>
     </div></section>
     <section class="section"><div class="section-heading"><div><span class="eyebrow">A considered collection</span><h2>Find your kind of home</h2><p>Browse places that feel a little more like you.</p></div><button class="text-link" data-action="clear-search">Explore all homes &nbsp; →</button></div>
       <div class="category-row">${categories.map(c => `<button class="category-chip ${state.filter === c ? "active" : ""}" data-filter="${c}">${c}</button>`).join("")}</div>
     </section>
-    <section class="section" id="homesSection"><div class="section-heading"><div><span class="eyebrow">${state.mode === "Buy" ? "Picked for you" : "Made for living"}</span><h2>${state.search ? "Homes near " + escapeHtml(state.search) : state.mode === "Buy" ? "Homes worth coming home to" : "Find your next rental"}</h2><p>${matching.length} thoughtfully selected ${matching.length === 1 ? "place" : "places"}</p></div><button class="text-link" data-action="show-all">View all &nbsp; →</button></div>
+    <section class="section" id="homesSection"><div class="section-heading"><div><span class="eyebrow">${state.mode === "Rent" ? "Made for living" : "Picked for you"}</span><h2>${state.location === "All cities" ? "Homes for every next chapter" : `Homes near ${escapeHtml(state.location)}`}</h2><p>${matching.length} thoughtfully selected ${matching.length === 1 ? "place" : "places"}</p></div><button class="text-link" data-action="show-all">View all &nbsp; →</button></div>
       <div class="property-grid">${matching.length ? matching.slice(0, 6).map(propertyCard).join("") : `<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">⌂</div><strong>No homes found just yet</strong><p>Try a different neighbourhood or category.</p><button class="button light small" data-action="clear-search">Clear filters</button></div>`}</div>
     </section>
     <section class="section"><div class="reel-feature"><div class="reel-preview" data-action="reel" data-reel="0"><img src="${reels[0].image}" alt="A warm, sunlit living room"><span class="play-button">▶</span><span class="reel-caption">A slow morning at Willow House · 0:28</span></div><div class="reel-copy"><span class="eyebrow">A little inspiration</span><h2>Good homes have<br>a story to tell.</h2><p>Take a peek inside the places, details, and neighbourhoods that make a house feel like home.</p><div class="reel-stats">✦ &nbsp;New stories, every week</div><button class="button" data-page="reels">Explore Haven Reels &nbsp; →</button></div></div></section>
-    <section class="broker-banner"><div><span class="eyebrow" style="color:#e0c596">For the people who make it happen</span><h2>Have a home to share?</h2><p>Meet your next client with a listing that feels like you.</p></div><button class="button" data-page="dashboard" data-auth="true">Join as a broker &nbsp; →</button></section>
+    <section class="broker-banner"><div><span class="eyebrow" style="color:#e0c596">For property owners</span><h2>List your place. Find your people.</h2><p>Share your property independently, then compare local brokers who can help it find the right buyer or renter.</p></div><div class="broker-banner-actions"><button class="button" data-page="add-property" data-auth="true">List a property &nbsp; →</button></div></section>
     <footer class="footer"><span>© 2025 Haven. Find your place.</span><span>Made for good beginnings.</span></footer>
   </div>`;
+}
+
+function renderLocationDialog() {
+  modal.classList.add("location-modal");
+  modalBackdrop.hidden = false;
+  modal.innerHTML = `<div class="location-modal-heading"><div><span class="eyebrow">Search nearby</span><h2 id="modalTitle">Change location</h2></div><button class="modal-close" aria-label="Close dialog">×</button></div>
+    <form id="locationForm" class="location-modal-body">
+      <p>Choose a city and how far you’d like to search.</p>
+      <label class="location-dialog-field"><span>Location</span><select name="city" id="locationCity">${locations.map(city => `<option ${state.location === city ? "selected" : ""}>${city}</option>`).join("")}</select></label>
+      <label class="location-dialog-field"><span>Radius</span><select name="radius" id="locationRadius">${[5, 10, 25, 50, 100].map(radius => `<option value="${radius}" ${state.radius === radius ? "selected" : ""}>${radius} kilometres</option>`).join("")}</select></label>
+      <div class="location-map-preview" id="locationMapPreview" role="img" aria-label="Map preview of ${escapeHtml(state.location)} within ${state.radius} kilometres">
+        <span class="location-map-label">${escapeHtml(state.location)}</span><span class="location-map-water"></span><span class="location-map-road road-a"></span><span class="location-map-road road-b"></span><span class="location-map-road road-c"></span>
+        <span class="location-radius-ring" style="--radius-size:${Math.min(88, 42 + (state.radius - 5) * 0.45)}%"></span><span class="location-map-pin">⌖</span>
+        <span class="location-map-radius-label">${state.radius} km radius</span>
+      </div>
+      <div class="location-dialog-actions"><button class="button outline" type="button" data-action="close-modal">Cancel</button><button class="button" type="submit">Apply</button></div>
+    </form>`;
+  modal.querySelector("#locationCity")?.focus();
+}
+
+function updateLocationPreview() {
+  const city = document.querySelector("#locationCity")?.value;
+  const radius = Number(document.querySelector("#locationRadius")?.value);
+  const preview = document.querySelector("#locationMapPreview");
+  if (!preview || !city || !radius) return;
+  preview.setAttribute("aria-label", `Map preview of ${city} within ${radius} kilometres`);
+  preview.querySelector(".location-map-label").textContent = city;
+  preview.querySelector(".location-map-radius-label").textContent = `${radius} km radius`;
+  preview.querySelector(".location-radius-ring").style.setProperty("--radius-size", `${Math.min(88, 42 + (radius - 5) * 0.45)}%`);
+}
+
+function resetHomeFilters(location = "Mumbai") {
+  state.location = location;
+  state.radius = 25;
+  state.mode = "All";
+  state.budget = "any";
+  state.filter = "All homes";
 }
 
 function renderDetails(property = state.selectedProperty) {
@@ -203,11 +352,71 @@ function renderDetails(property = state.selectedProperty) {
   </div>`;
 }
 
+function getPropertyBrokers() {
+  const location = String(state.selectedProperty?.location || "").toLowerCase();
+  return brokers.filter(broker => broker.markets.some(market => location.includes(market)));
+}
+
+function getVisibleBrokers() {
+  const budgetLimits = { "under-50000": 50000, "under-80000": 80000 };
+  return getPropertyBrokers()
+    .filter(broker => state.brokerTier === "All" || broker.tier === state.brokerTier)
+    .filter(broker => !budgetLimits[state.brokerBudget] || broker.fee <= budgetLimits[state.brokerBudget])
+    .filter(broker => state.brokerService === "All services" || broker.services.includes(state.brokerService))
+    .sort((a, b) => {
+      if (state.brokerSort === "fee") return a.fee - b.fee;
+      if (state.brokerSort === "experience") return b.experience - a.experience;
+      return b.rating - a.rating || b.reviews - a.reviews;
+    });
+}
+
+function renderBrokerCard(broker) {
+  const selected = state.selectedBroker === broker.id;
+  return `<article class="broker-result ${selected ? "selected" : ""}">
+    <img class="broker-result-photo" src="${broker.image}" alt="${escapeHtml(broker.name)}">
+    <div class="broker-result-info"><div class="broker-name-row"><h3>${escapeHtml(broker.name)}</h3><span class="broker-tier ${broker.tier.toLowerCase()}">${broker.tier}</span></div>
+      <p class="broker-location">⌖ &nbsp;${escapeHtml(broker.city)} · serves your neighbourhood</p>
+      <div class="broker-credentials"><span>★ ${broker.rating.toFixed(1)} <small>(${broker.reviews} reviews)</small></span><span>${broker.experience} yrs experience</span></div>
+      <div class="broker-services">${broker.services.map(service => `<span>${escapeHtml(service)}</span>`).join("")}</div>
+    </div>
+    <div class="broker-result-price"><strong>₹${broker.fee.toLocaleString("en-IN")}</strong><small>service package</small><button class="broker-select-button ${selected ? "chosen" : ""}" data-action="select-broker" data-broker="${broker.id}">${selected ? "Selected ✓" : "Choose"}</button></div>
+  </article>`;
+}
+
+function renderBrokers() {
+  const property = state.selectedProperty || properties[0];
+  const matches = getPropertyBrokers();
+  const visible = getVisibleBrokers();
+  const selected = brokers.find(broker => broker.id === state.selectedBroker);
+  main.innerHTML = `<div class="page-shell broker-page">
+    <div class="breadcrumbs"><button data-page="dashboard">Your workspace</button><span>›</span><span>Find a broker</span></div>
+    <div class="page-intro broker-page-intro"><div><span class="eyebrow">A good local match</span><h1>Meet your property team.</h1><p>Compare trusted brokers near <strong>${escapeHtml(property.location)}</strong> and choose the support that suits you.</p></div><button class="button outline" data-page="dashboard">Done for now</button></div>
+    <section class="broker-map" aria-label="Map showing brokers near ${escapeHtml(property.location)}">
+      <div class="map-label map-label-one"> ${escapeHtml(property.location.split(",")[0])} </div><div class="map-label map-label-two">${escapeHtml(matches[0]?.city || "Your neighbourhood")}</div>
+      <span class="map-road road-one"></span><span class="map-road road-two"></span><span class="map-road road-three"></span>
+      ${matches.slice(0, 5).map((broker, index) => `<span class="map-pin pin-${index + 1}" aria-label="${escapeHtml(broker.name)}"><span>${initials(broker.name).slice(0, 1)}</span></span>`).join("")}
+      <div class="map-match-count"><span>●</span> ${matches.length} brokers near your property</div>
+      <div class="map-property-dot" aria-label="Your property">⌂</div>
+    </section>
+    <section class="broker-sheet"><div class="broker-sheet-handle" aria-hidden="true"></div>
+      <div class="broker-list-heading"><div><span class="eyebrow">Local expertise, your choice</span><h2>Choose your broker</h2><p>Compare reputation, experience, services and transparent package fees.</p></div><span class="broker-match-total">${visible.length} ${visible.length === 1 ? "match" : "matches"}</span></div>
+      <div class="broker-filters">
+        <div class="broker-tier-filter" role="group" aria-label="Broker type">${["All", "Premium", "Local"].map(tier => `<button class="${state.brokerTier === tier ? "active" : ""}" data-action="broker-tier" data-tier="${tier}">${tier}</button>`).join("")}</div>
+        <label class="broker-filter-select"><span>Budget</span><select id="brokerBudget"><option value="any" ${state.brokerBudget === "any" ? "selected" : ""}>Any fee</option><option value="under-50000" ${state.brokerBudget === "under-50000" ? "selected" : ""}>Under ₹50,000</option><option value="under-80000" ${state.brokerBudget === "under-80000" ? "selected" : ""}>Under ₹80,000</option></select></label>
+        <label class="broker-filter-select"><span>Sort by</span><select id="brokerSort"><option value="rating" ${state.brokerSort === "rating" ? "selected" : ""}>Top rated</option><option value="experience" ${state.brokerSort === "experience" ? "selected" : ""}>Most experienced</option><option value="fee" ${state.brokerSort === "fee" ? "selected" : ""}>Lowest fee</option></select></label>
+        <label class="broker-filter-select broker-service-select"><span>Services</span><select id="brokerService">${["All services", ...new Set(brokers.flatMap(broker => broker.services))].map(service => `<option ${state.brokerService === service ? "selected" : ""}>${escapeHtml(service)}</option>`).join("")}</select></label>
+      </div>
+      <div class="broker-results">${visible.length ? visible.map(renderBrokerCard).join("") : `<div class="empty-state"><div class="empty-icon">⌖</div><strong>${matches.length ? "No brokers match these filters" : "No brokers listed in this area yet"}</strong><p>${matches.length ? "Try adjusting your budget or service preferences." : "We’ll show local options here as they join Haven. You can still publish your property independently."}</p><button class="button light small" data-action="reset-broker-filters">Reset filters</button></div>`}</div>
+    </section>
+    <div class="broker-action-bar"><div>${selected ? `<strong>${escapeHtml(selected.name)} selected</strong><span>${escapeHtml(selected.tier)} · ₹${selected.fee.toLocaleString("en-IN")} package</span>` : `<strong>Choose a broker to continue</strong><span>Your contact details stay private.</span>`}</div><button class="button" data-action="message-selected-broker" ${selected ? "" : "disabled"}>Message broker &nbsp; →</button></div>
+  </div>`;
+}
+
 function renderDashboard() {
   const listings = [...state.customListings, ...properties.slice(0, 3)];
   const total = listings.length;
   main.innerHTML = `<div class="page-shell">
-    <div class="page-intro"><div><span class="eyebrow">Your Haven workspace</span><h1>Good morning, ${escapeHtml((state.user?.name || "Ananya").split(" ")[0])}.</h1><p>Here's what's happening with your properties today.</p></div><button class="button" data-page="add-property">＋ &nbsp; Add a property</button></div>
+    <div class="page-intro"><div><span class="eyebrow">Your Haven workspace</span><h1>Good morning, ${escapeHtml((state.user?.name || "Ananya").split(" ")[0])}.</h1><p>Here's what's happening with your properties today.</p></div><div class="page-intro-actions"><button class="button" data-page="add-property">＋ &nbsp; Add a property</button></div></div>
     <div class="stat-grid"><div class="stat-card"><span>Active listings</span><strong>${total}</strong><small>↑ &nbsp;2 added this month</small></div><div class="stat-card"><span>Listing views</span><strong>1,284</strong><small>↑ &nbsp;18% this week</small></div><div class="stat-card"><span>New enquiries</span><strong>${Math.max(3, state.messages.length + 3)}</strong><small>↑ &nbsp;2 need a reply</small></div><div class="stat-card"><span>Viewings booked</span><strong>4</strong><small>Next one · Today, 4:30 pm</small></div></div>
     <div class="dashboard-grid"><section class="panel"><div class="panel-heading"><h2>Your properties</h2><button class="text-link" data-action="show-all">View all →</button></div>${listings.slice(0, 4).map(p => `<div class="listing-row"><img src="${p.image}" alt=""><div class="listing-row-copy"><strong>${escapeHtml(p.title)}</strong><small>${escapeHtml(p.location)} · ${p.beds} beds</small></div><span class="listing-price">${money(p.price, p.mode)}</span><span class="status">Live</span></div>`).join("")}</section>
       <section class="panel"><div class="panel-heading"><h2>Recent activity</h2><button class="text-link" data-page="messages">All messages →</button></div>
@@ -276,7 +485,7 @@ function renderPreview(data) {
       <section style="padding-top:24px"><h2 style="font-size:18px">About this home</h2><p class="muted" style="font-size:12px;line-height:1.8">${escapeHtml(data.description)}</p></section>
       ${data.photoUrls?.length ? `<div class="upload-previews">${data.photoUrls.map(url => `<img src="${url}" alt="Listing photo">`).join("")}</div>` : ""}
       </div></div>
-    <div class="form-actions" style="margin-top:20px"><button class="button outline" data-page="add-property">← &nbsp; Back to edit</button><button class="button" data-action="publish">Publish your listing &nbsp; →</button></div>
+    <div class="form-actions" style="margin-top:20px"><button class="button outline" data-page="add-property">← &nbsp; Back to edit</button><button class="button" data-action="publish">Publish &amp; find brokers &nbsp; →</button></div>
   </div>`;
 }
 
@@ -286,17 +495,22 @@ function renderMessages() {
     { name: "Arjun Kapoor", image: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=100&q=80", property: "Salt House" },
     { name: "Maya Iyer", image: "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=100&q=80", property: "Olive Grove" }
   ];
-  const active = received[0];
-  const persisted = state.messages;
-  const messages = [
+  const active = state.messageContact || received[0];
+  const persisted = state.messageContact
+    ? (state.brokerConversations[state.messageContact.id] || []).map(text => ({ text, mine: true, time: "Just now" }))
+    : state.messages.map(text => ({ text, mine: true, time: "Just now" }));
+  const messages = state.messageContact ? [
+    { text: `Hello! I’d be happy to discuss helping with ${state.selectedProperty.title}. What kind of support are you looking for?`, mine: false, time: "Just now" },
+    ...persisted
+  ] : [
     { text: "Hello! I came across Willow House and it looks lovely. Is the garden pet-friendly?", mine: false, time: "10:42 am" },
     { text: "Hi Priya, thank you! Yes, the garden is fully enclosed and very pet-friendly.", mine: true, time: "10:49 am" },
     { text: "That's wonderful. Could I arrange a viewing this weekend?", mine: false, time: "10:51 am" },
-    ...persisted.map(text => ({ text, mine: true, time: "Just now" }))
+    ...persisted
   ];
   main.innerHTML = `<div class="page-shell"><div class="page-intro"><div><span class="eyebrow">A better way to connect</span><h1>Your messages.</h1><p>Good conversations make finding home a little easier.</p></div></div>
-    <div class="inbox-layout"><aside class="thread-list"><h2>Inbox <span class="muted" style="font-size:11px">(${received.length})</span></h2>${received.map((m, i) => `<div class="thread-item ${i === 0 ? "active" : ""}" data-thread="${i}"><img src="${m.image}" alt=""><div><strong>${m.name}</strong><small>${m.property} · New message</small></div></div>`).join("")}</aside>
-    <section class="chat-panel"><div class="chat-header"><img src="${active.image}" alt=""><div><strong>${active.name}</strong><small>Interested in ${active.property} · Haven member</small></div></div>
+    <div class="inbox-layout"><aside class="thread-list"><h2>Inbox <span class="muted" style="font-size:11px">(${state.messageContact ? 1 : received.length})</span></h2>${(state.messageContact ? [{ ...state.messageContact, property: state.selectedProperty.title }] : received).map((m, i) => `<div class="thread-item ${i === 0 ? "active" : ""}" data-thread="${i}"><img src="${m.image}" alt=""><div><strong>${escapeHtml(m.name)}</strong><small>${escapeHtml(m.property)} · ${state.messageContact ? "Broker" : "New message"}</small></div></div>`).join("")}</aside>
+    <section class="chat-panel"><div class="chat-header"><img src="${active.image}" alt=""><div><strong>${escapeHtml(active.name)}</strong><small>${state.messageContact ? `Haven broker · ${escapeHtml(active.city)}` : `Interested in ${active.property} · Haven member`}</small></div></div>
     <div class="chat-messages" id="chatMessages">${messages.map(m => `<div class="message ${m.mine ? "mine" : ""}">${escapeHtml(m.text)}<time>${m.time}</time></div>`).join("")}</div>
     <form class="message-compose" id="messageForm"><input name="message" placeholder="Write a thoughtful reply..." aria-label="Message" required><button aria-label="Send message">→</button></form></section></div>
     <p class="privacy-note" style="text-align:left">🔒 Haven keeps your personal phone number private. Keep conversations and viewing arrangements right here.</p>
@@ -317,6 +531,7 @@ function render() {
   if (state.page === "home") renderHome();
   else if (state.page === "details") renderDetails(state.selectedProperty);
   else if (state.page === "dashboard") renderDashboard();
+  else if (state.page === "brokers") renderBrokers();
   else if (state.page === "add-property") renderAddProperty();
   else if (state.page === "preview") renderPreview(state.formData);
   else if (state.page === "messages") renderMessages();
@@ -341,10 +556,17 @@ function toast(message) {
 }
 
 function navigate(page) {
-  if (["dashboard", "messages", "add-property", "preview"].includes(page) && !state.user) {
+  if (["dashboard", "messages", "add-property", "preview", "brokers"].includes(page) && !state.user) {
     state.pendingPage = page;
     openAuth();
     return;
+  }
+  if (page === "brokers" && state.page !== "brokers") {
+    state.selectedBroker = null;
+    state.brokerTier = "All";
+    state.brokerBudget = "any";
+    state.brokerSort = "rating";
+    state.brokerService = "All services";
   }
   if (!modalBackdrop.hidden) closeModal();
   state.page = page;
@@ -373,6 +595,7 @@ function renderAuthModal(register = false) {
 
 function closeModal() {
   modalBackdrop.hidden = true;
+  modal.classList.remove("location-modal");
   modal.innerHTML = "";
 }
 
@@ -445,9 +668,15 @@ function publishListing() {
   };
   state.customListings.unshift(listing);
   localStorage.setItem("haven-listings", JSON.stringify(state.customListings));
+  state.selectedProperty = listing;
+  state.selectedBroker = null;
   state.formData = null;
-  toast("Your property is live on Haven.");
-  navigate("dashboard");
+  state.brokerTier = "All";
+  state.brokerBudget = "any";
+  state.brokerSort = "rating";
+  state.brokerService = "All services";
+  navigate("brokers");
+  toast("Your property is live. Choose a local broker whenever you're ready.");
 }
 
 function openReel(index) {
@@ -485,10 +714,20 @@ document.addEventListener("click", event => {
   if (filter) { state.filter = filter.dataset.filter; render(); return; }
   const action = event.target.closest("[data-action]");
   if (action) {
-    if (action.dataset.action === "clear-search") { state.search = ""; state.filter = "All homes"; render(); }
-    else if (action.dataset.action === "show-all") { state.filter = "All homes"; state.search = ""; if (state.page !== "home") navigate("home"); else render(); }
+    if (action.dataset.action === "open-location") renderLocationDialog();
+    else if (action.dataset.action === "clear-search") { resetHomeFilters(); render(); }
+    else if (action.dataset.action === "show-all") { resetHomeFilters("All cities"); if (state.page !== "home") navigate("home"); else render(); }
     else if (action.dataset.action === "contact-broker") { state.pendingMessage = true; if (!state.user) openAuth(); else navigate("messages"); }
     else if (action.dataset.action === "request-viewing") { if (!state.user) openAuth(); else { navigate("messages"); toast("Send the broker a message to arrange a viewing."); } }
+    else if (action.dataset.action === "broker-tier") { state.brokerTier = action.dataset.tier; renderBrokers(); }
+    else if (action.dataset.action === "select-broker") { state.selectedBroker = action.dataset.broker; renderBrokers(); }
+    else if (action.dataset.action === "message-selected-broker") {
+      const broker = brokers.find(item => item.id === state.selectedBroker);
+      if (broker) { state.messageContact = broker; navigate("messages"); }
+    }
+    else if (action.dataset.action === "reset-broker-filters") {
+      state.brokerTier = "All"; state.brokerBudget = "any"; state.brokerSort = "rating"; state.brokerService = "All services"; renderBrokers();
+    }
     else if (action.dataset.action === "toggle-auth") renderAuthModal(!modal.querySelector("#authName"));
     else if (action.dataset.action === "reel") openReel(Number(action.dataset.reel));
     else if (action.dataset.action === "reel-property") { closeModal(); state.selectedProperty = reels[state.selectedReel].property; navigate("details"); }
@@ -501,10 +740,17 @@ document.addEventListener("click", event => {
 document.addEventListener("submit", event => {
   if (event.target.id === "searchForm") {
     event.preventDefault();
-    state.search = document.querySelector("#locationSearch").value.trim();
     state.mode = document.querySelector("#modeSelect").value;
+    state.budget = document.querySelector("#budgetSelect").value;
+    state.filter = document.querySelector("#propertyTypeSelect").value;
     render();
     document.querySelector("#homesSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  } else if (event.target.id === "locationForm") {
+    event.preventDefault();
+    state.location = event.target.elements.city.value;
+    state.radius = Number(event.target.elements.radius.value);
+    closeModal();
+    render();
   } else if (event.target.id === "authForm") {
     event.preventDefault();
     const form = new FormData(event.target);
@@ -536,15 +782,41 @@ document.addEventListener("submit", event => {
     const input = event.target.elements.message;
     const text = input.value.trim();
     if (!text) return;
-    state.messages.push(text);
-    localStorage.setItem("haven-messages", JSON.stringify(state.messages));
+    if (state.messageContact) {
+      const conversation = state.brokerConversations[state.messageContact.id] || [];
+      conversation.push(text);
+      state.brokerConversations[state.messageContact.id] = conversation;
+      localStorage.setItem("haven-broker-conversations", JSON.stringify(state.brokerConversations));
+    } else {
+      state.messages.push(text);
+      localStorage.setItem("haven-messages", JSON.stringify(state.messages));
+    }
     renderMessages();
     document.querySelector("#chatMessages")?.scrollTo({ top: 10000, behavior: "smooth" });
   }
 });
 
 document.addEventListener("change", async event => {
+  if (event.target.id === "locationCity" || event.target.id === "locationRadius") updateLocationPreview();
+  if (event.target.id === "modeSelect") {
+    state.mode = event.target.value;
+    render();
+    return;
+  }
+  if (event.target.id === "budgetSelect") {
+    state.budget = event.target.value;
+    render();
+    return;
+  }
+  if (event.target.id === "propertyTypeSelect") {
+    state.filter = event.target.value;
+    render();
+    return;
+  }
   if (event.target.id === "propertyCategory") updateTypeOptions();
+  if (event.target.id === "brokerBudget") { state.brokerBudget = event.target.value; renderBrokers(); }
+  if (event.target.id === "brokerSort") { state.brokerSort = event.target.value; renderBrokers(); }
+  if (event.target.id === "brokerService") { state.brokerService = event.target.value; renderBrokers(); }
   if (event.target.id === "photoUpload") {
     const files = [...event.target.files].slice(0, 8);
     if (!files.length) return;
