@@ -414,7 +414,7 @@ h3 { font-size: 16px; }
   .broker-page > .breadcrumbs, .broker-page-intro { margin-left: 16px; margin-right: 16px; }
   .broker-page-intro { align-items: flex-start; }
   .broker-page-intro h1 { font-size: 32px; }
-  .broker-page-intro > .button { display: none; }
+  .broker-page-intro > .button { display: inline-flex; align-self: flex-start; margin-top: -9px; padding: 9px 13px; font-size: 10px; }
   .broker-map { height: 220px; border-left: 0; border-right: 0; }
   .broker-sheet { margin-top: -14px; padding: 14px 16px 22px; border-radius: 17px 17px 0 0; position: relative; }
   .broker-sheet-handle { display: block; width: 38px; height: 4px; margin: 0 auto 15px; border-radius: 5px; background: #dce1dc; }

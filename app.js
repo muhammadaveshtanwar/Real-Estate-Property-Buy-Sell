@@ -166,6 +166,7 @@ const state = {
   brokerSort: "rating",
   brokerService: "All services",
   selectedReel: 0,
+  reelViewerOpen: false,
   formData: null,
   photoProcessing: false
 };
@@ -596,6 +597,7 @@ function renderAuthModal(register = false) {
 function closeModal() {
   modalBackdrop.hidden = true;
   modal.classList.remove("location-modal");
+  state.reelViewerOpen = false;
   modal.innerHTML = "";
 }
 
@@ -680,10 +682,24 @@ function publishListing() {
 }
 
 function openReel(index) {
-  const reel = reels[index] || reels[0];
-  state.selectedReel = index;
+  state.selectedReel = (index + reels.length) % reels.length;
+  const reel = reels[state.selectedReel];
+  state.reelViewerOpen = true;
   modalBackdrop.hidden = false;
-  modal.innerHTML = `<button class="modal-close" aria-label="Close reel">×</button><div style="position:relative;margin:-34px -34px 20px"><img src="${reel.image}" alt="${escapeHtml(reel.title)}" style="width:100%;height:min(56vh,420px);object-fit:cover;filter:brightness(.76)"><span class="play-button" style="font-size:13px">▶</span></div><span class="eyebrow">Haven stories · ${reel.views}</span><h2 id="modalTitle">${escapeHtml(reel.title)}</h2><p>A little look inside ${escapeHtml(reel.property.title)}. Explore the listing to see the details and meet the broker.</p><button class="button full" data-action="reel-property">Explore this home &nbsp; →</button>`;
+  modal.innerHTML = `<button class="modal-close" aria-label="Close reel">×</button><div class="reel-viewer-media" style="position:relative;margin:-34px -34px 20px;touch-action:pan-y"><img src="${reel.image}" alt="${escapeHtml(reel.title)}" style="width:100%;height:min(56vh,420px);object-fit:cover;filter:brightness(.76)"><span class="play-button" style="font-size:13px">▶</span></div><span class="eyebrow">Haven stories · ${reel.views}</span><h2 id="modalTitle">${escapeHtml(reel.title)}</h2><p>A little look inside ${escapeHtml(reel.property.title)}. Explore the listing to see the details and meet the broker.</p><button class="text-link" data-action="next-reel" aria-label="Next property video">Next property video &nbsp; →</button><button class="button full" data-action="reel-property">Explore this home &nbsp; →</button>`;
+  const media = modal.querySelector(".reel-viewer-media");
+  let startX = null;
+  media.addEventListener("pointerdown", event => {
+    if (event.isPrimary && event.pointerType !== "mouse") startX = event.clientX;
+  });
+  media.addEventListener("pointerup", event => {
+    if (startX === null) return;
+    const distance = event.clientX - startX;
+    startX = null;
+    if (Math.abs(distance) < 50 || window.innerWidth > 650) return;
+    openReel(state.selectedReel + (distance < 0 ? 1 : -1));
+  });
+  media.addEventListener("pointercancel", () => { startX = null; });
 }
 
 document.addEventListener("click", event => {
@@ -730,6 +746,7 @@ document.addEventListener("click", event => {
     }
     else if (action.dataset.action === "toggle-auth") renderAuthModal(!modal.querySelector("#authName"));
     else if (action.dataset.action === "reel") openReel(Number(action.dataset.reel));
+    else if (action.dataset.action === "next-reel") openReel(state.selectedReel + 1);
     else if (action.dataset.action === "reel-property") { closeModal(); state.selectedProperty = reels[state.selectedReel].property; navigate("details"); }
     else if (action.dataset.action === "publish") publishListing();
     else if (action.dataset.action === "close-modal") closeModal();
@@ -846,6 +863,8 @@ document.addEventListener("change", async event => {
 
 document.addEventListener("keydown", event => {
   if (event.key === "Escape") closeModal();
+  if (state.reelViewerOpen && event.key === "ArrowRight") openReel(state.selectedReel + 1);
+  if (state.reelViewerOpen && event.key === "ArrowLeft") openReel(state.selectedReel - 1);
   if ((event.key === "Enter" || event.key === " ") && event.target.matches(".property-card, .reel-card")) {
     event.preventDefault();
     event.target.click();
